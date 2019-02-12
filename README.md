@@ -1,2 +1,2 @@
 # Stats
-Just some data wrangling of ebird data of sandhill cranes in Wisconsin and visualization using ggplot2 and leaflet
+Visualizing ebird observation data of Sandhill Cranes in Wisconsin using ggplot2 and leaflet
