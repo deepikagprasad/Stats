@@ -1,0 +1,100 @@
+---
+title: "Visualizing ebird observation data of Sandhill Cranes in Wisconsin"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+library(tidyverse)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(rgdal)
+library(leaflet)
+```
+
+#Data wrangling
+```{r}
+
+#reading ebird data in its original requested format
+SCdata <- read.csv("ebird_WI_sandhillcranes.csv", header = TRUE, sep=",")
+
+#month 
+SC.ObsMonthName <- months(mdy(SCdata$OBSERVATION.DATE))
+#month number - to be used for sorting
+SC.ObsMonthNumber <- month(mdy(SCdata$OBSERVATION.DATE))
+
+#replace X with 1 (seen but how many not reported)
+SC.ObsCount <- as.numeric(str_replace(SCdata$OBSERVATION.COUNT, "X", "1"))
+SC.County <- SCdata$COUNTY
+SC.Latitude <- SCdata$LATITUDE
+SC.Year <- year(mdy(SCdata$OBSERVATION.DATE))
+
+#adding all the necessary columns into a dataframe 
+SCdata <- cbind.data.frame(SC.ObsMonthName, SC.ObsMonthNumber, SC.ObsCount, SC.County, SC.Latitude, SC.Year)
+
+#order by month 
+SCdata <- SCdata[order(SC.ObsMonthNumber),]
+
+#filter by year
+SCdata <- subset(SCdata, SC.Year == 2017)
+```
+
+#Calculating average count by Month
+
+```{r}
+
+#calculating average number of sandhill cranes seen per observation each Month of the year
+CountByMonth <- SCdata %>% group_by(SC.ObsMonthNumber) %>% summarise(SC.ObsCount = mean(as.numeric(SC.ObsCount))) 
+```
+
+
+#Visualizing using ggplot
+```{r}
+#creating two vectors of month to be used to plot using ggplot
+MonthNumber = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
+Month = c("Jan", "Feb" , "March", "April", "May", "June", "July", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+#plot average number of sandhill cranes seen per observation each month of the year using ggplot
+ggplot(CountByMonth, aes(x=SC.ObsMonthNumber, y=SC.ObsCount))+
+      geom_point() +
+      scale_x_continuous(breaks = MonthNumber, label = Month) +
+      labs(x = "Observed Month", y = "Average number of sanhill cranes per observation") +
+      ggtitle("Sandhill Crane Observations by Month") 
+```
+
+#Calculating average count by county
+```{r}
+
+#calculating average number of sandhill cranes seen per observation in each of counties in Wisconsin
+CountByCounty <- SCdata %>% group_by(SC.County) %>% summarise(SC.ObsCount = mean(as.numeric(SC.ObsCount))) 
+
+```
+
+#Visualizing county level data using leaflet
+```{r}
+#reading WI counties from USA states shape file 
+counties <- readOGR(dsn= 'data/counties', layer = 'cb_2017_us_county_500k') %>% .[.$STATEFP == 55,]
+
+#joining the county level count data 
+counties@data <- left_join(counties@data, CountByCounty, by= c('NAME' = 'SC.County'))
+
+#setting popup label 
+popup <- paste0('<i>', counties$NAME, ' County</i><br><br>',
+                '<b>Avg Obs Count:</b>', round(counties$SC.ObsCount,0), '<br>')
+
+#setting colorcode
+palette <- colorFactor("YlOrRd", counties$SC.ObsCount)
+
+#using leaflet package to render average count of sandhill cranes by county
+leaflet(data = counties) %>%
+  addProviderTiles('Esri.WorldGrayCanvas') %>%
+  addPolygons(stroke = FALSE,
+              fillColor = ~ palette(counties$SC.ObsCount),
+              fillOpacity = 1,
+              popup = popup)
+```
+
